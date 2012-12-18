@@ -8,7 +8,6 @@
     webmachine_deps,
     webmachine_dispatcher,
     webmachine_error_handler,
-    webmachine_logger,
     webmachine_perf_logger,
     webmachine_resource,
     webmachine_request,
@@ -18,7 +17,10 @@
     webmachine_multipart,
     webmachine_util,
     wrq,
-    wmtrace_resource
+    wmtrace_resource,
+    webmachine_log_handler,
+    webmachine_logger_watcher,
+    webmachine_logger_watcher_sup
   ]},
   {registered, []},
   {mod, {webmachine_app, []}},

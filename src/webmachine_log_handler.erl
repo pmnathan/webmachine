@@ -1,36 +1,56 @@
-%% @author Justin Sheehy <justin@basho.com>
-%% @author Andy Gross <andy@basho.com>
-%% @copyright 2007-2008 Basho Technologies
+%% Copyright (c) 2011-2012 Basho Technologies, Inc.  All Rights Reserved.
 %%
-%%    Licensed under the Apache License, Version 2.0 (the "License");
-%%    you may not use this file except in compliance with the License.
-%%    You may obtain a copy of the License at
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
 %%
-%%        http://www.apache.org/licenses/LICENSE-2.0
+%%   http://www.apache.org/licenses/LICENSE-2.0
 %%
-%%    Unless required by applicable law or agreed to in writing, software
-%%    distributed under the License is distributed on an "AS IS" BASIS,
-%%    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%%    See the License for the specific language governing permissions and
-%%    limitations under the License.
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
 
--module(webmachine_logger).
--author('Justin Sheehy <justin@basho.com>').
--author('Andy Gross <andy@basho.com>').
--behaviour(gen_server).
--export([start_link/1]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
--export([log_access/1, refresh/0]).
+%% @doc Default log handler for webmachine
+
+-module(webmachine_log_handler).
+
+-behaviour(gen_event).
+
+%% Public API
+-export([refresh/0]).
+
+%% gen_event callbacks
+-export([init/1,
+         handle_call/2,
+         handle_event/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
+
 -include("webmachine_logger.hrl").
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -record(state, {hourstamp, filename, handle}).
 
-alog_path(BaseDir) ->
-    filename:join(BaseDir, "access.log").
+%% ===================================================================
+%% Public API
+%% ===================================================================
 
-start_link(BaseDir) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [BaseDir], []).
+refresh() ->
+    refresh(os:timestamp()).
 
+%% ===================================================================
+%% gen_event callbacks
+%% ===================================================================
+
+%% @private
 init([BaseDir]) ->
     defer_refresh(),
     FileName = alog_path(BaseDir),
@@ -39,36 +59,41 @@ init([BaseDir]) ->
     Handle = log_open(FileName, DateHour),
     {ok, #state{filename=FileName, handle=Handle, hourstamp=DateHour}}.
 
-refresh() ->
-    refresh(now()).
+%% @private
+handle_call({_Label, MRef, get_modules}, State) ->
+    {ok, {MRef, [?MODULE]}, State};
+handle_call(_Request, State) ->
+    {ok, ok, State}.
 
-refresh(Time) ->
-    gen_server:cast(?MODULE, {refresh, Time}).
-
-log_access(#wm_log_data{}=D) ->
-    gen_server:cast(?MODULE, {log_access, D}).
-
-handle_call(_Msg,_From,State) -> {noreply,State}.
-
-handle_cast({log_access, LogData}, State) ->
-    NewState = maybe_rotate(State, now()),
+%% @private
+handle_event({log_access, LogData}, State) ->
+    NewState = maybe_rotate(State, os:timestamp()),
     Msg = format_req(LogData),
     log_write(NewState#state.handle, Msg),
-    {noreply, NewState};
-handle_cast({refresh, Time}, State) ->
-    {noreply, maybe_rotate(State, Time)}.
+    {ok, NewState};
+handle_event({refresh, Time}, State) ->
+    {ok, maybe_rotate(State, Time)};
+handle_event(_Event, State) ->
+    {ok, State}.
 
-handle_info({_Label, {From, MRef}, get_modules}, State) ->
-    From ! {MRef, [?MODULE]},
-    {noreply, State};
+%% @private
 handle_info(_Info, State) ->
-    {noreply, State}.
+    {ok, State}.
 
+%% @private
 terminate(_Reason, _State) ->
     ok.
 
+%% @private
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+alog_path(BaseDir) ->
+    filename:join(BaseDir, "access.log").
 
 log_open(FileName, DateHour) ->
     LogName = FileName ++ suffix(DateHour),
@@ -81,11 +106,13 @@ log_open(FileName, DateHour) ->
 
 log_write({?MODULE, _Name, FD}, IoData) ->
     file:write(FD, lists:flatten(IoData)).
-    
 
 log_close({?MODULE, Name, FD}) ->
     io:format("~p: closing log file: ~p~n", [?MODULE, Name]),
     file:close(FD).
+
+refresh(Time) ->
+    gen_server:cast(?MODULE, {refresh, Time}).
 
 maybe_rotate(State, Time) ->
     ThisHour = datehour(Time),
@@ -96,11 +123,11 @@ maybe_rotate(State, Time) ->
             log_close(State#state.handle),
             Handle = log_open(State#state.filename, ThisHour),
             State#state{hourstamp=ThisHour, handle=Handle}
-    end.    
+    end.
 
-format_req(#wm_log_data{method=Method, 
-                        headers=Headers, 
-                        peer=Peer, 
+format_req(#wm_log_data{method=Method,
+                        headers=Headers,
+                        peer=Peer,
                         path=Path,
                         version=Version,
                         response_code=ResponseCode,
@@ -109,12 +136,12 @@ format_req(#wm_log_data{method=Method,
     Time = fmtnow(),
     Status = integer_to_list(ResponseCode),
     Length = integer_to_list(ResponseLength),
-    Referer = 
+    Referer =
         case mochiweb_headers:get_value("Referer", Headers) of
             undefined -> "";
             R -> R
         end,
-    UserAgent = 
+    UserAgent =
         case mochiweb_headers:get_value("User-Agent", Headers) of
             undefined -> "";
             U -> U
@@ -123,7 +150,6 @@ format_req(#wm_log_data{method=Method,
              Status, Length, Referer, UserAgent).
 
 fmt_method(M) when is_atom(M) -> atom_to_list(M).
-
 
 %% Seek backwards to the last valid log entry
 fix_log(_FD, 0) ->
@@ -201,7 +227,8 @@ month(12) ->
 zone() ->
     Time = erlang:universaltime(),
     LocalTime = calendar:universal_time_to_local_time(Time),
-    DiffSecs = calendar:datetime_to_gregorian_seconds(LocalTime) - calendar:datetime_to_gregorian_seconds(Time),
+    DiffSecs = calendar:datetime_to_gregorian_seconds(LocalTime) -
+        calendar:datetime_to_gregorian_seconds(Time),
     zone((DiffSecs/3600)*100).
 
 %% Ugly reformatting code to get times like +0000 and -1300

@@ -32,12 +32,12 @@ start(Options) ->
             EH -> EH
         end,
     {LogDir, Options5} = get_option(log_dir, Options4),
-    case whereis(webmachine_logger) of
-      undefined ->
-        webmachine_sup:start_logger(LogDir);
-      _ ->
-        ignore
-    end,
+    %% case whereis(webmachine_logger) of
+    %%   undefined ->
+    %%     webmachine_sup:start_logger(LogDir);
+    %%   _ ->
+    %%     ignore
+    %% end,
     case EnablePerfLog of
         true ->
           case whereis(webmachine_perf_logger) of
@@ -80,7 +80,7 @@ loop(MochiReq) ->
            end,
     {Path, _} = Req:path(),
     {RD, _} = Req:get_reqdata(),
-    
+
     %% Run the dispatch code, catch any errors...
     try webmachine_dispatcher:dispatch(Host, Path, DispatchList, RD) of
         {no_dispatch_match, _UnmatchedHost, _UnmatchedPathTokens} ->

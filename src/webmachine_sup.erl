@@ -35,7 +35,7 @@ start_link() ->
 start_logger(BaseDir) ->
     case application:get_env(webmachine, webmachine_logger_module) of
         {ok, LoggerModule} ->
-            ChildSpec = 
+            ChildSpec =
                 {webmachine_logger,
                  {LoggerModule, start_link, [BaseDir]},
                  permanent, 5000, worker, dynamic},
@@ -44,7 +44,7 @@ start_logger(BaseDir) ->
     end.
 
 start_perf_logger(BaseDir) ->
-    ChildSpec = 
+    ChildSpec =
         {webmachine_perf_logger,
          {webmachine_perf_logger, start_link, [BaseDir]},
          permanent, 5000, worker, [webmachine_perf_logger]},
@@ -75,5 +75,9 @@ init([]) ->
     Router = {webmachine_router,
               {webmachine_router, start_link, []},
               permanent, 5000, worker, [webmachine_router]},
-    Processes = [Router],
+    LogHandler = [{webmachine_logger, {gen_event, start_link, [{local, webmachine_log_event}]},
+                   permanent, 5000, worker, [dynamic]},
+                  {webmachine_logger_watcher_sup, {webmachine_logger_watcher_sup, start_link, []},
+                   permanent, 5000, supervisor, [webmachine_logger_watcher_sup]}],
+    Processes = LogHandler ++ [Router],
     {ok, {{one_for_one, 9, 10}, Processes}}.

@@ -18,7 +18,8 @@
 -author('Justin Sheehy <justin@basho.com>').
 -author('Andy Gross <andy@basho.com>').
 -export([start/0, stop/0]).
--export([new_request/2]).
+-export([log_access/1,
+         new_request/2]).
 
 -include("webmachine_logger.hrl").
 -include("wm_reqstate.hrl").
@@ -42,11 +43,11 @@ new_request(mochiweb, Request) ->
     Version = Request:get(version),
     {Headers, RawPath} = case application:get_env(webmachine, rewrite_module) of
         {ok, RewriteMod} ->
-            do_rewrite(RewriteMod, 
-                       Method, 
-                       Scheme, 
-                       Version, 
-                       Request:get(headers), 
+            do_rewrite(RewriteMod,
+                       Method,
+                       Scheme,
+                       Version,
+                       Request:get(headers),
                        Request:get(raw_path));
         undefined ->
             {Request:get(headers), Request:get(raw_path)}
@@ -54,7 +55,7 @@ new_request(mochiweb, Request) ->
     Socket = Request:get(socket),
     InitState = #wm_reqstate{socket=Socket,
                           reqdata=wrq:create(Method,Scheme,Version,RawPath,Headers)},
-    
+
     InitReq = {webmachine_request,InitState},
     {Peer, ReqState} = InitReq:get_peer(),
     PeerState = ReqState#wm_reqstate{reqdata=wrq:set_peer(Peer,
@@ -69,6 +70,9 @@ new_request(mochiweb, Request) ->
                            response_length=0},
     webmachine_request:new(PeerState#wm_reqstate{log_data=LogData}).
 
+log_access(#wm_log_data{}=LogData) ->
+    gen_event:sync_notify(webmachine_log_event, {log_access, LogData}).
+
 do_rewrite(RewriteMod, Method, Scheme, Version, Headers, RawPath) ->
     case RewriteMod:rewrite(Method, Scheme, Version, Headers, RawPath) of
         %% only raw path has been rewritten (older style rewriting)
@@ -77,7 +81,3 @@ do_rewrite(RewriteMod, Method, Scheme, Version, Headers, RawPath) ->
         %% headers and raw path rewritten (new style rewriting)
         {NewHeaders, NewPath} -> {NewHeaders,NewPath}
     end.
-
-
-
-
