@@ -21,8 +21,7 @@
 -behaviour(supervisor).
 
 %% External exports
--export([start_link/0, upgrade/0, start_logger/1]).
--export([start_perf_logger/1]).
+-export([start_link/0, upgrade/0]).
 
 %% supervisor callbacks
 -export([init/1]).
@@ -31,24 +30,6 @@
 %% @doc API for starting the supervisor.
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-
-start_logger(BaseDir) ->
-    case application:get_env(webmachine, webmachine_logger_module) of
-        {ok, LoggerModule} ->
-            ChildSpec =
-                {webmachine_logger,
-                 {LoggerModule, start_link, [BaseDir]},
-                 permanent, 5000, worker, dynamic},
-            supervisor:start_child(?MODULE, ChildSpec);
-        _ -> nop
-    end.
-
-start_perf_logger(BaseDir) ->
-    ChildSpec =
-        {webmachine_perf_logger,
-         {webmachine_perf_logger, start_link, [BaseDir]},
-         permanent, 5000, worker, [webmachine_perf_logger]},
-    supervisor:start_child(?MODULE, ChildSpec).
 
 %% @spec upgrade() -> ok
 %% @doc Add processes if necessary.
