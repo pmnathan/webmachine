@@ -140,7 +140,7 @@ decision_flow(X, TestResult) when is_integer(X) ->
 decision_flow(X, _TestResult) when is_atom(X) -> d(X).
 
 do_log(LogData) ->
-    webmachine_log_handler:log_access(LogData),
+    webmachine:log_access(LogData),
     case application:get_env(webmachine, enable_perf_logger) of
         {ok, true} ->
             webmachine_perf_logger:log(LogData);

@@ -14,9 +14,9 @@
 %% specific language governing permissions and limitations
 %% under the License.
 
-%% @doc Default log handler for webmachine
+%% @doc Default performance log handler for webmachine
 
--module(webmachine_log_handler).
+-module(webmachine_perf_log_handler).
 
 -behaviour(gen_event).
 
@@ -39,7 +39,7 @@
 
 -record(state, {hourstamp, filename, handle}).
 
--define(FILENAME, "access.log").
+-define(FILENAME, "perf.log").
 
 %% ===================================================================
 %% Public API
@@ -94,33 +94,26 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ===================================================================
 
-format_req(#wm_log_data{method=Method,
-                        headers=Headers,
+format_req(#wm_log_data{resource_module=Mod,
+                        start_time=StartTime,
+                        method=Method,
                         peer=Peer,
                         path=Path,
                         version=Version,
                         response_code=ResponseCode,
-                        response_length=ResponseLength}) ->
-    User = "-",
+                        response_length=ResponseLength,
+                        end_time=EndTime,
+                        finish_time=FinishTime}) ->
     Time = webmachine_log:fmtnow(),
     Status = integer_to_list(ResponseCode),
     Length = integer_to_list(ResponseLength),
-    Referer =
-        case mochiweb_headers:get_value("Referer", Headers) of
-            undefined -> "";
-            R -> R
-        end,
-    UserAgent =
-        case mochiweb_headers:get_value("User-Agent", Headers) of
-            undefined -> "";
-            U -> U
-        end,
-    fmt_alog(Time, Peer, User, atom_to_list(Method), Path, Version,
-             Status, Length, Referer, UserAgent).
+    TTPD = webmachine_util:now_diff_milliseconds(EndTime, StartTime),
+    TTPS = webmachine_util:now_diff_milliseconds(FinishTime, EndTime),
+    fmt_plog(Time, Peer, atom_to_list(Method), Path, Version,
+             Status, Length, atom_to_list(Mod), integer_to_list(TTPD),
+             integer_to_list(TTPS)).
 
-fmt_alog(Time, Ip, User, Method, Path, {VM,Vm},
-         Status,  Length, Referrer, UserAgent) ->
-    [webmachine_log:fmt_ip(Ip), " - ", User, [$\s], Time, [$\s, $"], Method, " ", Path,
+fmt_plog(Time, Ip,  Method, Path, {VM,Vm}, Status, Length, Mod, TTPD, TTPS) ->
+    [webmachine_log:fmt_ip(Ip), " - ", [$\s], Time, [$\s, $"], Method, " ", Path,
      " HTTP/", integer_to_list(VM), ".", integer_to_list(Vm), [$",$\s],
-     Status, [$\s], Length, [$\s,$"], Referrer,
-     [$",$\s,$"], UserAgent, [$",$\n]].
+     Status, [$\s], Length, " " , Mod, " ", TTPD, " ", TTPS, $\n].
